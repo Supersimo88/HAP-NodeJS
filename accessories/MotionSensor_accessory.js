@@ -2,14 +2,23 @@ var Accessory = require('../').Accessory;
 var Service = require('../').Service;
 var Characteristic = require('../').Characteristic;
 var uuid = require('../').uuid;
+var wpi = require('wiring-pi');
+var sensorReading;
+var newStatus;
 
-// here's a fake hardware device that we'll expose to HomeKit
 var MOTION_SENSOR = {
   motionDetected: false,
 
   getStatus: function() {
-    //set the boolean here, this will be returned to the device
-    MOTION_SENSOR.motionDetected = false;
+    wpi.setup('phys');
+    sensorReading = wpi.digitalRead(15);
+    sensorReading = Number(sensorReading);
+    if (sensorReading == '1'){
+      MOTION_SENSOR.motionDetected = true;
+    }
+    if (sensorReading == '0'){
+      MOTION_SENSOR.motionDetected = false;
+    }
   },
   identify: function() {
     console.log("Identify the motion sensor!");
@@ -21,7 +30,7 @@ var MOTION_SENSOR = {
 // UUID based on an arbitrary "namespace" and the word "motionsensor".
 var motionSensorUUID = uuid.generate('hap-nodejs:accessories:motionsensor');
 
-// This is the Accessory that we'll return to HAP-NodeJS that represents our fake motionSensor.
+
 var motionSensor = exports.accessory = new Accessory('Motion Sensor', motionSensorUUID);
 
 // Add properties for publishing (in case we're using Core.js and not BridgedCore.js)
@@ -31,9 +40,8 @@ motionSensor.pincode = "031-45-154";
 // set some basic properties (these values are arbitrary and setting them is optional)
 motionSensor
   .getService(Service.AccessoryInformation)
-  .setCharacteristic(Characteristic.Manufacturer, "Oltica")
-  .setCharacteristic(Characteristic.Model, "Rev-1")
-  .setCharacteristic(Characteristic.SerialNumber, "A1S2NASF88EW");
+  .setCharacteristic(Characteristic.Manufacturer, "Generic")
+  .setCharacteristic(Characteristic.Model, "Motion Sensor");
 
 // listen for the "identify" event for this Accessory
 motionSensor.on('identify', function(paired, callback) {
@@ -42,9 +50,29 @@ motionSensor.on('identify', function(paired, callback) {
 });
 
 motionSensor
-  .addService(Service.MotionSensor, "Fake Motion Sensor") // services exposed to the user should have "names" like "Fake Motion Sensor" for us
+  .addService(Service.MotionSensor, "Motion Sensor")
   .getCharacteristic(Characteristic.MotionDetected)
   .on('get', function(callback) {
      MOTION_SENSOR.getStatus();
      callback(null, Boolean(MOTION_SENSOR.motionDetected));
 });
+
+setInterval(function() {
+  wpi.setup('phys');
+  sensorReading = wpi.digitalRead(15);
+  sensorReading = Number(sensorReading);
+  if (sensorReading == 1){
+    newStatus = true;
+  }
+  if (sensorReading == 0){
+    newStatus = false;
+  }
+
+  if(newStatus != MOTION_SENSOR.motionDetected){
+    console.log("updated status to: " + newStatus);
+    MOTION_SENSOR.motionDetected = newStatus;
+    motionSensor
+      .getService(Service.MotionSensor)
+      .setCharacteristic(Characteristic.MotionDetected, MOTION_SENSOR.motionDetected);
+  }
+}, 500);
